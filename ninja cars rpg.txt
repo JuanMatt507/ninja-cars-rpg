@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ninja Cars 100 Ultimate RPG</title>
+<style>
+  body { margin:0; background:#222; color:#fff; font-family:sans-serif; }
+  canvas { display:block; margin:auto; background:#111; }
+  #ui { text-align:center; margin-top:10px; }
+  #ui div { margin:4px; font-size:18px; }
+  #carSelect { margin-top:10px; }
+</style>
+</head>
+<body>
+<canvas id="game" width="800" height="400"></canvas>
+<div id="ui">
+  <div>Level: <span id="level">1</span></div>
+  <div>Score: <span id="score">0</span></div>
+  <div>Current Car: <span id="currentCar">Ghost Hawk</span></div>
+  <div>Title: <span id="title">None</span></div>
+  <div id="carSelect">
+    <label for="carsDropdown">Select Car:</label>
+    <select id="carsDropdown"></select>
+  </div>
+</div>
+
+<script>
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d');
+
+// Keys
+const keys = {};
+document.addEventListener('keydown', e => keys[e.key.toLowerCase()] = true);
+document.addEventListener('keyup', e => keys[e.key.toLowerCase()] = false);
+
+// Player
+let player = { x:100, y:300, width:50, height:30, color:'cyan', speed:5, level:1, currentCarIndex:0, score:0 };
+
+// Particle class
+class Particle{
+  constructor(x,y,color,dx,dy,size,duration){
+    this.x=x; this.y=y; this.color=color; this.dx=dx; this.dy=dy;
+    this.size=size; this.duration=duration;
+  }
+  update(){ this.x+=this.dx; this.y+=this.dy; this.duration--; }
+  draw(){ ctx.fillStyle=this.color; ctx.beginPath(); ctx.arc(this.x,this.y,this.size,0,Math.PI*2); ctx.fill(); }
+}
+
+// Effects array
+let effects = [];
+
+// 100 Ghost-Hawk style car names
+const carData = [
+["Ghost Hawk","Shadow Strike"],["Night Talon","Razor Bite"],["Steel Viper","Coil Fang"],["Crimson Fang","Blood Slash"],
+["Shadow Lynx","Silent Pounce"],["Iron Claw","Steel Smash"],["Dark Panther","Void Swipe"],["Thunder Raven","Lightning Peck"],
+["Phantom Wolf","Ghost Slash"],["Venom Snake","Poison Fang"],["Razor Falcon","Sharp Dive"],["Storm Cobra","Tempest Strike"],
+["Steel Jackal","Iron Bite"],["Black Howl","Night Screech"],["Venom Hawk","Toxic Slash"],["Shadow Tiger","Silent Strike"],
+["Frost Wolf","Ice Slash"],["Crimson Raven","Blood Talon"],["Iron Panther","Steel Smash"],["Thunder Lynx","Storm Pounce"],
+["Ghost Hawk X","Phantom Strike"],["Steel Fang","Iron Bite"],["Shadow Wolf","Night Slash"],["Crimson Talon","Blood Slash"],
+["Dark Falcon","Shadow Dive"],["Venom Panther","Toxic Strike"],["Ghost Lynx","Phantom Pounce"],["Thunder Fang","Lightning Bite"],
+["Razor Hawk","Sharp Slash"],["Steel Raven","Iron Peck"],["Shadow Cobra","Silent Bite"],["Frost Talon","Ice Slash"],
+["Crimson Wolf","Blood Bite"],["Iron Hawk","Steel Dive"],["Ghost Panther","Phantom Slash"],["Thunder Lynx X","Storm Strike"],
+["Venom Raven","Toxic Talon"],["Shadow Fang","Silent Slash"],["Night Cobra","Lunar Fang"],["Razor Wolf","Sharp Pounce"],
+["Steel Falcon","Iron Dive"],["Dark Lynx","Shadow Pounce"],["Ghost Talon","Phantom Bite"],["Crimson Panther","Blood Strike"],
+["Thunder Hawk","Lightning Slash"],["Iron Fang","Steel Bite"],["Shadow Raven","Silent Peck"],["Venom Talon","Toxic Strike"],
+["Frost Panther","Ice Bite"],["Crimson Cobra","Blood Fang"],["Steel Wolf","Iron Slash"],["Ghost Hawk Z","Phantom Strike"],
+["Shadow Falcon","Dark Dive"],["Night Fang","Lunar Bite"],["Razor Talon","Sharp Slash"],["Thunder Panther","Lightning Bite"],
+["Iron Raven","Steel Peck"],["Dark Talon","Shadow Bite"],["Ghost Wolf","Phantom Slash"],["Crimson Fang X","Blood Bite"],
+["Steel Hawk","Iron Dive"],["Shadow Lynx Z","Silent Pounce"],["Venom Wolf","Toxic Slash"],["Frost Talon X","Ice Bite"],
+["Crimson Raven X","Blood Talon"],["Iron Panther Z","Steel Smash"],["Ghost Cobra","Phantom Bite"],["Thunder Fang Z","Lightning Slash"],
+["Shadow Wolf X","Dark Pounce"],["Night Hawk Z","Lunar Strike"],["Razor Panther","Sharp Slash"],["Steel Talon X","Iron Bite"],
+["Dark Raven","Shadow Peck"],["Ghost Lynx Z","Phantom Pounce"],["Crimson Fang Z","Blood Slash"],["Thunder Hawk X","Lightning Strike"],
+["Iron Wolf","Steel Bite"],["Shadow Cobra Z","Silent Fang"],["Venom Panther X","Toxic Strike"],["Frost Fang Z","Ice Bite"],
+["Crimson Hawk","Blood Dive"],["Steel Falcon X","Iron Strike"],["Ghost Panther Z","Phantom Slash"],["Shadow Talon X","Dark Bite"],
+["Night Wolf","Lunar Pounce"],["Razor Fang Z","Sharp Slash"],["Thunder Raven X","Lightning Peck"],["Iron Talon","Steel Bite"],
+["Dark Panther X","Shadow Swipe"],["Ghost Hawk Y","Phantom Strike"],["Crimson Talon X","Blood Slash"],["Steel Cobra Z","Iron Bite"],
+["Shadow Wolf Y","Silent Pounce"],["Venom Fang Z","Toxic Bite"],["Frost Panther X","Ice Slash"],["Crimson Raven Y","Blood Talon"],
+["Iron Hawk X","Steel Dive"],["Ghost Talon Z","Phantom Bite"],["Thunder Panther Z","Lightning Slash"],["Touch Grass","Ultimate Move"]
+];
+
+const cars = carData.map((c,i)=>({
+  name:c[0],
+  unlockLevel:(i+1)*10,
+  attack:5+Math.floor(Math.random()*6),
+  speed:5+Math.floor(Math.random()*5),
+  health:5+Math.floor(Math.random()*6),
+  special:c[1],
+  color:`hsl(${i*3.6},80%,50%)`
+}));
+
+// Dropdown
+const carsDropdown = document.getElementById('carsDropdown');
+function updateDropdown(){
+  carsDropdown.innerHTML='';
+  cars.forEach((car,index)=>{
+    if(player.level>=car.unlockLevel){
+      const option=document.createElement('option');
+      option.value=index; option.textContent=car.name;
+      if(index===player.currentCarIndex) option.selected=true;
+      carsDropdown.appendChild(option);
+    }
+  });
+}
+carsDropdown.addEventListener('change', e=>{
+  player.currentCarIndex=parseInt(e.target.value); updateCarUI();
+});
+
+function updateCar(){
+  for(let i=cars.length-1;i>=0;i--){
+    if(player.level>=cars[i].unlockLevel){ player.currentCarIndex=i; break; }
+  }
+  updateDropdown();
+}
+function updateCarUI(){ document.getElementById('currentCar').innerText=cars[player.currentCarIndex].name; }
+function updateTitle(){ document.getElementById('title').innerText=(player.level>=1000)?"Touch Grass":"None"; }
+
+// Particles
+function triggerEffect(x,y,color){
+  for(let i=0;i<12;i++){
+    let angle=Math.random()*Math.PI*2, speed=Math.random()*3+1;
+    effects.push(new Particle(x+25,y+15,color,Math.cos(angle)*speed,Math.sin(angle)*speed,Math.random()*5+2,20));
+  }
+}
+function drawEffects(){ for(let i=effects.length-1;i>=0;i--){ let p=effects[i]; p.update(); p.draw(); if(p.duration<=0) effects.splice(i,1); } }
+
+// Enemies
+let enemies=[];
+function spawnEnemies(){
+  enemies=[];
+  if(player.level % 10 === 0){
+    enemies.push({x:600, y:150, width:70, height:50, color:'orange', health:50 + player.level*2, speed:3+player.level/20, direction:Math.random()>0.5?1:-1, isBoss:true});
+  } else {
+    for(let i=0;i<3;i++){
+      enemies.push({x:Math.random()*400+400,y:Math.random()*300,width:50,height:30,color:'red',health:20+Math.floor(player.level/5),speed:2+player.level/50,direction:Math.random()>0.5?1:-1});
+    }
+  }
+}
+
+// Mini-map
+function drawMiniMap(){
+  const mapW=150,mapH=80,scaleX=mapW/canvas.width,scaleY=mapH/canvas.height;
+  ctx.fillStyle='rgba(50,50,50,0.8)'; ctx.fillRect(canvas.width-mapW-10,10,mapW,mapH);
+  ctx.fillStyle='cyan'; ctx.fillRect(canvas.width-mapW-10+player.x*scaleX,10+player.y*scaleY,5,5);
+  enemies.forEach(e=>{ ctx.fillStyle=e.isBoss?'orange':'red'; ctx.fillRect(canvas.width-mapW-10+e.x*scaleX,10+e.y*scaleY,5,5); });
+}
+
+// Game loop
+function gameLoop(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  if(keys['arrowright']||keys['d']) player.x+=player.speed;
+  if(keys['arrowleft']||keys['a']) player.x-=player.speed;
+  if(keys['arrowup']||keys['w']) player.y-=5;
+  if(keys['arrowdown']||keys['s']) player.y+=5;
+  player.x=Math.max(0,Math.min(canvas.width-player.width,player.x));
+  player.y=Math.max(0,Math.min(canvas.height-player.height,player.y));
+
+  ctx.shadowColor='cyan'; ctx.shadowBlur=15;
+  ctx.fillStyle=player.color; ctx.fillRect(player.x,player.y,player.width,player.height);
+  ctx.shadowBlur=0;
+
+  enemies.forEach((enemy,index)=>{
+    enemy.x+=enemy.speed*enemy.direction;
+    if(enemy.x<=400||enemy.x>=750) enemy.direction*=-1;
+    ctx.shadowColor=enemy.isBoss?'orange':'red'; ctx.shadowBlur=15;
+    ctx.fillStyle=enemy.color; ctx.fillRect(enemy.x,enemy.y,enemy.width,enemy.height);
+    ctx.shadowBlur=0;
+
+    if(keys[' '] &&
+       player.x+player.width>enemy.x && player.x<enemy.x+enemy.width &&
+       player.y+player.height>enemy.y && player.y<enemy.y+enemy.height){
+      enemy.health-=cars[player.currentCarIndex].attack;
+      triggerEffect(enemy.x,enemy.y,cars[player.currentCarIndex].color);
+      player.x-=5; if(player.x<0) player.x=0;
+      if(enemy.health<=0){
+        let gained=enemy.isBoss?5:1; player.level+=gained; player.score+=gained;
+        document.getElementById('level').innerText=player.level;
+        document.getElementById('score').innerText=player.score;
+        updateCar(); updateCarUI(); updateTitle();
+        enemies.splice(index,1);
+      }
+    }
+  });
+
+  if(enemies.length===0) spawnEnemies();
+  drawEffects(); drawMiniMap();
+  requestAnimationFrame(gameLoop);
+}
+
+// Init
+updateCar(); updateCarUI(); updateTitle(); gameLoop();
+</script>
+</body>
+</html>
